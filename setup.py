@@ -1,74 +1,108 @@
 import os
 import sys
-import platform
 import subprocess
 from setuptools import setup, Extension
 from setuptools.command.build_ext import build_ext
+from setuptools.command.build import build
+from setuptools.command.install import install
+from shutil import which as find_executable
+
+this_dir = os.path.dirname(os.path.abspath(__file__))
+
+jamspell = Extension(
+    name="_jamspell",
+    include_dirs=[".", "jamspell"],
+    sources=[
+        os.path.join("jamspell", "lang_model.cpp"),
+        os.path.join("jamspell", "spell_corrector.cpp"),
+        os.path.join("jamspell", "utils.cpp"),
+        os.path.join("jamspell", "perfect_hash.cpp"),
+        os.path.join("jamspell", "bloom_filter.cpp"),
+        os.path.join("contrib", "cityhash", "city.cc"),
+        os.path.join("contrib", "phf", "phf.cc"),
+        os.path.join("jamspell.i"),
+    ],
+    extra_compile_args=["-std=c++11", "-O2"],
+    swig_opts=["-c++", "-py3"],
+)
+
+if sys.platform == "darwin":
+    jamspell.extra_compile_args.append("-stdlib=libc++")
 
 
-class CMakeExtension(Extension):
-    def __init__(self, name, sourcedir=""):
-        Extension.__init__(self, name, sources=[])
-        self.sourcedir = os.path.abspath(sourcedir)
-
-
-class CMakeBuild(build_ext):
+class CustomBuild(build):
     def run(self):
-        try:
-            out = subprocess.check_output(["cmake", "--version"])
-        except OSError:
+        self.run_command("build_ext")
+        build.run(self)
+
+
+class CustomInstall(install):
+    def run(self):
+        self.run_command("build_ext")
+        install.run(self)
+
+
+class Swig4Ext(build_ext):
+    def find_swig(self):
+        # First, check for SWIG in the Python virtualenv
+        python_bin_dir = os.path.dirname(sys.executable)
+        swig_in_venv = os.path.join(python_bin_dir, "swig")
+        swig4_in_venv = os.path.join(python_bin_dir, "swig4.0")
+
+        swigBinary = None
+        if os.path.exists(swig4_in_venv):
+            swigBinary = swig4_in_venv
+        elif os.path.exists(swig_in_venv):
+            swigBinary = swig_in_venv
+
+        # If not in venv, fall back to searching the system PATH
+        if not swigBinary:
+            swigBinary = find_executable("swig4.0") or find_executable("swig")
+
+        if not swigBinary:
             raise RuntimeError(
-                "CMake must be installed to build the following extensions: "
-                + ", ".join(e.name for e in self.extensions)
+                "SWIG executable not found. Please add 'swig' to your "
+                "build-system requirements in pyproject.toml."
             )
 
-        for ext in self.extensions:
-            self.build_extension(ext)
+        try:
+            output = subprocess.check_output([swigBinary, "-version"])
+            if b"SWIG Version 4" not in output:
+                raise RuntimeError(
+                    f"SWIG version 4.x is required, but found version from {swigBinary}. "
+                    "Please ensure 'swig>=4,<5' is in your build-system requirements."
+                )
+        except (subprocess.CalledProcessError, FileNotFoundError) as e:
+            raise RuntimeError(f"SWIG version check failed: {e}")
 
-    def build_extension(self, ext):
-        extdir = os.path.abspath(os.path.dirname(self.get_ext_fullpath(ext.name)))
-        cmake_args = [
-            "-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=" + extdir,
-            "-DPYTHON_EXECUTABLE=" + sys.executable,
-        ]
+        return swigBinary
 
-        cfg = "Debug" if self.debug else "Release"
-        build_args = ["--config", cfg]
 
-        if platform.system() == "Windows":
-            cmake_args += [
-                "-DCMAKE_LIBRARY_OUTPUT_DIRECTORY_{}={}".format(cfg.upper(), extdir)
-            ]
-            if sys.maxsize > 2**32:
-                cmake_args += ["-A", "x64"]
-            build_args += ["--", "/m"]
-        else:
-            cmake_args += ["-DCMAKE_BUILD_TYPE=" + cfg]
-            build_args += ["--", "-j2"]
-
-        env = os.environ.copy()
-        env["CXXFLAGS"] = '{} -DVERSION_INFO=\\"{}\\"'.format(
-            env.get("CXXFLAGS", ""), self.distribution.get_version()
-        )
-        if not os.path.exists(self.build_temp):
-            os.makedirs(self.build_temp)
-        subprocess.check_call(
-            ["cmake", ext.sourcedir] + cmake_args, cwd=self.build_temp, env=env
-        )
-        subprocess.check_call(
-            ["cmake", "--build", "."] + build_args, cwd=self.build_temp
-        )
-
+VERSION = "0.0.12"
 
 setup(
     name="jamspell",
-    version="0.0.12",
-    author="Fedor Korotkiy",
-    author_email="f.korotkiy@gmail.com",
-    description="python bindings for jamspell",
-    long_description="",
-    ext_modules=[CMakeExtension("_jamspell", sourcedir="jamspell")],
-    cmdclass=dict(build_ext=CMakeBuild),
+    version=VERSION,
+    author="Filipp Ozinov",
+    author_email="fippo@mail.ru",
+    url="https://github.com/bakwc/JamSpell",
+    download_url="https://github.com/bakwc/JamSpell/tarball/" + VERSION,
+    description="spell checker",
+    long_description="context-based spell checker",
+    keywords=["nlp", "spell", "spell-checker", "jamspell"],
+    classifiers=[
+        "Programming Language :: Python :: 3.6",
+        "Programming Language :: Python :: 3.7",
+        "Programming Language :: Python :: 3.8",
+        "Programming Language :: Python :: 3.9",
+        "Programming Language :: Python :: 3.10",
+        "Programming Language :: Python :: 3.11",
+        "License :: OSI Approved :: MIT License",
+    ],
+    python_requires=">=3.6",
+    py_modules=["jamspell"],
+    ext_modules=[jamspell],
     zip_safe=False,
-    install_requires=["numpy"],
+    cmdclass={"build": CustomBuild, "install": CustomInstall, "build_ext": Swig4Ext},
+    include_package_data=True,
 )
