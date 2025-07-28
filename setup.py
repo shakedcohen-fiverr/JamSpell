@@ -21,10 +21,9 @@ jamspell = Extension(
         os.path.join('jamspell', 'bloom_filter.cpp'),
         os.path.join('contrib', 'cityhash', 'city.cc'),
         os.path.join('contrib', 'phf', 'phf.cc'),
-        os.path.join('jamspell.i'),
+        'jamspell_wrap.cpp',
     ],
     extra_compile_args=['-std=c++11', '-O2'],
-    swig_opts=['-c++', '-py3'],
 )
 
 if sys.platform == 'darwin':
@@ -39,14 +38,7 @@ class CustomBuild(build):
 class CustomInstall(install):
     def run(self):
         self.run_command('build_ext')
-        install.run(self)
-
-class Swig4Ext(build_ext):
-    def find_swig(self):
-        swigBinary = find_executable('swig4.0') or find_executable('swig')
-        assert swigBinary is not None
-        assert subprocess.check_output([swigBinary, "-version"]).find(b'SWIG Version 4') != -1
-        return swigBinary
+        self.do_egg_install()
 
 VERSION = '0.0.12'
 
@@ -76,7 +68,6 @@ setup(
     cmdclass={
         'build': CustomBuild,
         'install': CustomInstall,
-        'build_ext': Swig4Ext,
     },
     include_package_data=True,
 )

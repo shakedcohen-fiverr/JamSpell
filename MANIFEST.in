@@ -1,2 +1,5 @@
 graft jamspell
 graft contrib
+
+include jamspell_wrap.cpp
+include jamspell.py
