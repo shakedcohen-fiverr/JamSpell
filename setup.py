@@ -1,12 +1,7 @@
 import os
 import sys
-from setuptools.command.build import build
-from setuptools.command.build_ext import build_ext
-from setuptools.command.install import install
-from shutil import which as find_executable
 from setuptools import setup
 from setuptools.extension import Extension
-import subprocess
 
 this_dir = os.path.dirname(os.path.abspath(__file__))
 
@@ -28,17 +23,6 @@ jamspell = Extension(
 
 if sys.platform == 'darwin':
     jamspell.extra_compile_args.append('-stdlib=libc++')
-
-class CustomBuild(build):
-    def run(self):
-        self.run_command('build_ext')
-        build.run(self)
-
-
-class CustomInstall(install):
-    def run(self):
-        self.run_command('build_ext')
-        self.do_egg_install()
 
 VERSION = '0.0.12'
 
@@ -65,9 +49,5 @@ setup(
     py_modules=['jamspell'],
     ext_modules=[jamspell],
     zip_safe=False,
-    cmdclass={
-        'build': CustomBuild,
-        'install': CustomInstall,
-    },
     include_package_data=True,
 )
