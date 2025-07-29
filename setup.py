@@ -43,7 +43,9 @@ class CustomInstall(install):
 
 class Swig4Ext(build_ext):
     def find_swig(self):
-        return True
+        from shutil import which
+        assert which('swig4.0') or which('swig'), 'SWIG executable not found in PATH'
+        return which('swig4.0') if which('swig4.0') else which('swig')
 
 VERSION = '0.0.12'
 
