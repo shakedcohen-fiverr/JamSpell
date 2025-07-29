@@ -44,6 +44,7 @@ class CustomInstall(install):
 class Swig4Ext(build_ext):
     def find_swig(self):
         swigBinary = find_executable('swig4.0') or find_executable('swig')
+        print("swig_binary:" + swigBinary + "swig version:" + subprocess.check_output([swigBinary, "-version"]))
         assert swigBinary is not None
         assert subprocess.check_output([swigBinary, "-version"]).find(b'SWIG Version 4') != -1
         return swigBinary
